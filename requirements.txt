@@ -1,0 +1,4 @@
+# Covert Strike: Stage One - runtime dependencies
+# Pinned to versions with prebuilt Windows wheels for CPython 3.10 (Win 8.1 x64)
+pygame==2.6.1
+numpy==1.26.4
