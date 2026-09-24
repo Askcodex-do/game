@@ -85,10 +85,25 @@ jobs:
           # The packaged binary supports the same headless smoke mode, which
           # proves the frozen bundle can start, build its assets and simulate
           # frames without a display.
-          & "./dist/CovertStrike.exe" --smoke 200
-          if ($LASTEXITCODE -ne 0) { throw "Packaged smoke test failed" }
+          #
+          # The game is linked as a windowed app, so it has no console and the
+          # call operator (&) does not wait for it - $LASTEXITCODE would be
+          # stale. Start-Process -Wait -PassThru blocks and gives us the real
+          # exit code. Its stdout still reaches the log through a redirect.
+          $out = "smoke_out.txt"
+          $err = "smoke_err.txt"
+          $proc = Start-Process -FilePath "./dist/CovertStrike.exe" `
+            -ArgumentList "--smoke", "200" -NoNewWindow -Wait -PassThru `
+            -RedirectStandardOutput $out -RedirectStandardError $err
+          Get-Content $out -ErrorAction SilentlyContinue | Write-Host
+          Get-Content $err -ErrorAction SilentlyContinue | Write-Host
+          Write-Host ("Packaged smoke run exit code: {0}" -f $proc.ExitCode)
+          if ($proc.ExitCode -ne 0) { throw "Packaged smoke test failed (exit $($proc.ExitCode))" }
 
       - name: Upload the executable artifact
+        # Always upload, so the .exe is available for download even if a later
+        # verification step has trouble.
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: CovertStrike-windows-x64-${{ github.event.inputs.version || github.ref_name }}
