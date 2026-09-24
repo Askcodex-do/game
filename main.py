@@ -807,11 +807,22 @@ def parse_args(argv):
                         help="window scale factor")
     parser.add_argument("--smoke", type=int, default=0,
                         help="run N headless simulation frames and report")
+    parser.add_argument("--play", action="store_true",
+                        help="skip the launcher and start the game directly")
     return parser.parse_args(argv)
 
 
 def main(argv=None):
     argv = list(sys.argv[1:] if argv is None else argv)
+
+    # Double-clicking the executable (no arguments, frozen build) opens the
+    # graphical launcher instead of dropping straight into a full-screen game.
+    # Any explicit argument, and every source run, keeps the original
+    # behaviour so the CLI and the CI smoke test are unaffected.
+    if not argv and getattr(sys, "frozen", False):
+        from launcher import main as launcher_main
+        return launcher_main()
+
     args = parse_args(argv)
     if args.smoke:
         return run_smoke(args.smoke)

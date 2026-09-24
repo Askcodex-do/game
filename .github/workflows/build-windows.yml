@@ -76,6 +76,24 @@ jobs:
           $size = (Get-Item $exe).Length / 1MB
           Write-Host ("Built {0} ({1:N1} MB)" -f $exe, $size)
 
+      - name: Verify the executable carries an icon and version resource
+        shell: pwsh
+        run: |
+          # A missing icon or version block would mean the resource compiler
+          # silently skipped assets/, which is easy to miss from the log alone.
+          $exe = Get-Item "dist/CovertStrike.exe"
+          $info = $exe.VersionInfo
+          Write-Host ("FileDescription: {0}" -f $info.FileDescription)
+          Write-Host ("ProductName:     {0}" -f $info.ProductName)
+          if ($info.ProductName -notlike "*Covert Strike*") {
+            throw "Version resource is missing or wrong: '$($info.ProductName)'"
+          }
+          # Extract the icon group; a sizeable blob proves the art was embedded.
+          Add-Type -AssemblyName System.Drawing
+          $icon = [System.Drawing.Icon]::ExtractAssociatedIcon($exe.FullName)
+          if ($null -eq $icon) { throw "No icon embedded in the executable" }
+          Write-Host ("Icon size: {0}x{1}" -f $icon.Width, $icon.Height)
+
       - name: Smoke-run the packaged executable
         shell: pwsh
         env:
