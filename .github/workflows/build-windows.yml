@@ -1,0 +1,103 @@
+name: Build Windows EXE
+
+# Produces a standalone Windows executable with PyInstaller. The build runs on
+# a Windows runner because a real .exe cannot be cross-compiled from Linux.
+#
+# The resulting artifact targets Windows 8.1 / 10 / 11 on x64.
+#
+# Trigger it from the Actions tab ("Run workflow") or by pushing a tag like
+# v1.0.0. The finished .exe is attached to the workflow run as an artifact, and
+# to a GitHub Release when triggered by a tag.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version label for the artifact (e.g. 1.0.0)"
+        required: false
+        default: "dev"
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+env:
+  # Keep the build reproducible and avoid the noisy Python 3.13 free-threading
+  # variants; 3.10 matches the project's stated target interpreter.
+  PYTHON_VERSION: "3.10"
+
+jobs:
+  build-windows:
+    name: Build game.exe
+    runs-on: windows-2022
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          architecture: x64
+
+      - name: Show interpreter version
+        run: python --version
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+          python -m pip install pyinstaller==6.11.1
+
+      - name: Run the test suite (gate the build on it)
+        env:
+          SDL_VIDEODRIVER: dummy
+          SDL_AUDIODRIVER: dummy
+        run: python -m pytest tests -q
+
+      - name: Run the headless smoke test
+        env:
+          SDL_VIDEODRIVER: dummy
+          SDL_AUDIODRIVER: dummy
+        run: python main.py --smoke 600
+
+      - name: Build the executable
+        run: python -m PyInstaller covert_strike.spec --noconfirm --clean
+
+      - name: Verify the executable exists
+        shell: pwsh
+        run: |
+          $exe = "dist/CovertStrike.exe"
+          if (-not (Test-Path $exe)) { throw "Build did not produce $exe" }
+          $size = (Get-Item $exe).Length / 1MB
+          Write-Host ("Built {0} ({1:N1} MB)" -f $exe, $size)
+
+      - name: Smoke-run the packaged executable
+        shell: pwsh
+        env:
+          SDL_VIDEODRIVER: dummy
+          SDL_AUDIODRIVER: dummy
+        run: |
+          # The packaged binary supports the same headless smoke mode, which
+          # proves the frozen bundle can start, build its assets and simulate
+          # frames without a display.
+          & "./dist/CovertStrike.exe" --smoke 200
+          if ($LASTEXITCODE -ne 0) { throw "Packaged smoke test failed" }
+
+      - name: Upload the executable artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: CovertStrike-windows-x64-${{ github.event.inputs.version || github.ref_name }}
+          path: dist/CovertStrike.exe
+          if-no-files-found: error
+
+      - name: Attach the executable to a release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/CovertStrike.exe
+          generate_release_notes: true
