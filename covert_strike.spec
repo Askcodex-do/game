@@ -3,7 +3,13 @@
 
 Everything the game needs is generated at runtime (textures, sprites, sound
 effects and music are all synthesised procedurally), so there are no data files
-to bundle. The result is a single self-contained CovertStrike.exe.
+to bundle. The result is a single self-contained CovertStrike.exe with a real
+Windows icon and version resource.
+
+The icon and version info in assets/ are produced by tools/make_icon.py. They
+are regenerated here if missing so a clean checkout still builds. Building on
+a platform where that tool cannot run (a non-Windows host without a display)
+falls back to an icon-less build rather than failing.
 
 Build with:
     python -m PyInstaller covert_strike.spec --noconfirm --clean
@@ -11,10 +17,26 @@ Build with:
 
 from PyInstaller.utils.hooks import collect_dynamic_libs
 
+import subprocess
 import sys
 from pathlib import Path
 
 project_root = Path(SPECPATH)
+assets = project_root / "assets"
+icon_path = assets / "icon.ico"
+version_path = assets / "version.txt"
+
+# Generate the icon and version resource if they are not present yet.
+if not icon_path.exists() or not version_path.exists():
+    try:
+        subprocess.check_call(
+            [sys.executable, str(project_root / "tools" / "make_icon.py")])
+    except Exception as exc:  # pragma: no cover - host dependent
+        print(f"warning: could not generate assets ({exc}); building without icon")
+
+# PyInstaller wants str paths, and only on platforms that support them.
+exe_icon = str(icon_path) if icon_path.exists() else None
+exe_version = str(version_path) if version_path.exists() else None
 
 block_cipher = None
 
@@ -85,6 +107,7 @@ exe = EXE(
     a.datas,
     [],
     name="CovertStrike",
+    version=exe_version,
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -97,6 +120,5 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    # Windows 8.1 compatibility is set by the manifest below.
-    icon=None,
+    icon=exe_icon,
 )
