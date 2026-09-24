@@ -51,7 +51,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt
-          python -m pip install pyinstaller==6.11.1
+          python -m pip install pyinstaller==6.11.1 pytest==8.3.3
 
       - name: Run the test suite (gate the build on it)
         env:
